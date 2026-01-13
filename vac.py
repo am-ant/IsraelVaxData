@@ -121,14 +121,12 @@ town_data = town_data.sort_values("Vaccine type")
 st.subheader(f"נתונים עבור {selected_town}")
 
 # Define how many charts per row (5 is usually the limit for readability)
-charts_per_row = 5
+charts_per_row = 1
 items = list(town_data.iterrows())
 
 # Loop through the vaccines in chunks
 for i in range(0, len(items), charts_per_row):
-    if i > 0:
-        st.divider() # This creates a clean gray line between rows
-        
+
     # Create a new row of columns
     cols = st.columns(charts_per_row)
     chunk = items[i : i + charts_per_row]
@@ -138,31 +136,36 @@ for i in range(0, len(items), charts_per_row):
         vax_display_name = VAX_MAP.get(vax_type_raw, vax_type_raw)
         town_rate = int(round(row["Vaccine coverage"]))
         avg_rate = global_averages.get(vax_type_raw, 0)
-        
+            
         with cols[j]:
-            # 1. The Metric Header
-            st.metric(label=vax_display_name, value=f"{town_rate}%", delta=f"{town_rate - avg_rate}%")
+            # Metric header
+            st.markdown(f'<div style="text-align: right; direction: rtl;"><b>{vax_display_name}</b></div>', unsafe_allow_html=True)
 
-            # 2. The Chart
             fig = go.Figure()
             fig.add_trace(go.Bar(
-                x=['יישוב', 'ממוצע'], # Simplified labels to save space
-                y=[town_rate, avg_rate],
-                marker_color=['#1f77b4', '#d3d3d3'], 
-                width=0.7,
-                text=[f"{town_rate}%", f"{avg_rate}%"], # Hardcoded text with %
-                textposition='outside'
+                y=['ממוצע', 'יישוב'], # The categories go on Y
+                x=[avg_rate, town_rate], # The values go on X
+                orientation='h',         # Horizontal orientation
+                marker_color=['#d3d3d3', '#1f77b4'], 
+                width=0.6,
+                text=[f"{avg_rate}%", f"{town_rate}%"], 
+                textposition='inside',   # Puts the % inside the bar to save space
+                insidetextanchor='end'   # Aligns the text to the end of the bar
             ))
 
             fig.update_layout(
-                height=220, 
-                margin=dict(l=10, r=10, t=20, b=30),
-                yaxis_range=[0, 120], # Room for the % label
+                height=140, # Much shorter height needed for horizontal bars
+                margin=dict(l=10, r=40, t=10, b=10), # Space on the right for labels
+                xaxis_range=[0, 115],
                 showlegend=False,
-                xaxis=dict(visible=True, tickfont=dict(size=11)),
-                yaxis=dict(visible=False), # Hide Y axis entirely
+                xaxis=dict(visible=False), # Hide the bottom axis
+                yaxis=dict(
+                    visible=True, 
+                    tickfont=dict(size=12),
+                    autorange="reversed" # Keeps 'יישוב' on top if desired
+                ),
                 paper_bgcolor='rgba(0,0,0,0)',
                 plot_bgcolor='rgba(0,0,0,0)',
             )
             
-            st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False}, key=f"vax_{vax_type_raw}")
+            st.plotly_chart(fig, use_container_width=True, config={'staticPlot': True}, key=f"vax_{vax_type_raw}")
