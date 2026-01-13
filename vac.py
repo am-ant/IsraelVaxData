@@ -124,48 +124,127 @@ st.subheader(f"נתונים עבור {selected_town}")
 charts_per_row = 1
 items = list(town_data.iterrows())
 
+
+# --- Global Legend for the Bullet Charts ---
+st.markdown(f"""
+    <div style="display: flex; justify-content: flex-end; gap: 25px; direction: rtl; margin-bottom: 20px; padding: 10px; background-color: #f9f9f9; border-radius: 10px;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+            <div style="width: 30px; height: 12px; background-color: #1f77b4; border-radius: 2px;"></div>
+            <span style="font-size: 14px; font-weight: bold;">כיסוי ביישוב ({selected_town})</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+            <div style="width: 30px; height: 0px; border-top: 3px dashed Red;"></div>
+            <span style="font-size: 14px; font-weight: bold;">ממוצע ארצי</span>
+        </div>
+    </div>
+""", unsafe_allow_html=True)
+
+st.markdown("""
+    <style>
+    /* 1. Reduce the gap between ALL elements in the main body */
+    [data-testid="stVerticalBlock"] {
+        gap: 0rem !important;
+    }
+    /* 2. Reduce padding around the main container */
+    .block-container {
+        padding-top: 1rem !important;
+        padding-bottom: 0rem !important;
+    }
+    /* 3. Force Plotly charts to have zero bottom margin */
+    iframe {
+        margin-bottom: -40px !important;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
 # Loop through the vaccines in chunks
 for i in range(0, len(items), charts_per_row):
 
-    # Create a new row of columns
-    cols = st.columns(charts_per_row)
+    # Create the row of columns
+    cols = st.columns(charts_per_row, gap=None)
     chunk = items[i : i + charts_per_row]
     
-    for j, (_, row) in enumerate(chunk):
+    for j, (index, row) in enumerate(chunk):
         vax_type_raw = row["Vaccine type"]
         vax_display_name = VAX_MAP.get(vax_type_raw, vax_type_raw)
         town_rate = int(round(row["Vaccine coverage"]))
         avg_rate = global_averages.get(vax_type_raw, 0)
-            
+        
+        # USE THE SPECIFIC COLUMN [j]
         with cols[j]:
-            # Metric header
-            st.markdown(f'<div style="text-align: right; direction: rtl;"><b>{vax_display_name}</b></div>', unsafe_allow_html=True)
-
             fig = go.Figure()
+
+            # 1. The Main Town Bar
             fig.add_trace(go.Bar(
-                y=['ממוצע', 'יישוב'], # The categories go on Y
-                x=[avg_rate, town_rate], # The values go on X
-                orientation='h',         # Horizontal orientation
-                marker_color=['#d3d3d3', '#1f77b4'], 
-                width=0.6,
-                text=[f"{avg_rate}%", f"{town_rate}%"], 
-                textposition='inside',   # Puts the % inside the bar to save space
-                insidetextanchor='end'   # Aligns the text to the end of the bar
+                y=[vax_display_name],
+                x=[town_rate],
+                orientation='h',
+                marker_color='#1f77b4',
+                # Keep the percentage exactly as before
+                text=f"{town_rate}%",
+                textposition='outside', # Or 'inside' if you prefered that look
+                cliponaxis=False,        # Ensures text doesn't get cut off
+                width=0.6
             ))
 
+            # 2. Add the Vaccine Name INSIDE the bar as an annotation
+            fig.add_annotation(
+                x=5,                   # Place it near the start (5% mark)
+                y=0,
+                text=vax_display_name, # The Hebrew Vaccine Name
+                showarrow=False,
+                font=dict(color="white", size=14),
+                xanchor="left"         # Anchor to the left for RTL feel
+            )
+
+            # 3. The Average Line (Keep as is)
+            fig.add_shape(
+                type="line",
+                x0=avg_rate, x1=avg_rate,
+                y0=-0.4, y1=0.4,
+                line=dict(color="Red", width=3, dash="dash")
+            )
+
             fig.update_layout(
-                height=140, # Much shorter height needed for horizontal bars
-                margin=dict(l=10, r=40, t=10, b=10), # Space on the right for labels
+                height=110, # Can be even shorter now
+                margin=dict(l=5, r=40, t=10, b=10), # Extra right margin for % text
                 xaxis_range=[0, 115],
                 showlegend=False,
-                xaxis=dict(visible=False), # Hide the bottom axis
-                yaxis=dict(
-                    visible=True, 
-                    tickfont=dict(size=12),
-                    autorange="reversed" # Keeps 'יישוב' on top if desired
-                ),
+                xaxis=dict(visible=False),
+                yaxis=dict(visible=False),
                 paper_bgcolor='rgba(0,0,0,0)',
                 plot_bgcolor='rgba(0,0,0,0)',
             )
             
             st.plotly_chart(fig, use_container_width=True, config={'staticPlot': True}, key=f"vax_{vax_type_raw}")
+        
+        
+            
+            
+st.divider()
+st.markdown('<div style="text-align: right; direction: rtl;"><h3>טבלת סיכום: כיסוי חיסוני לעומת ממוצע</h3></div>', unsafe_allow_html=True)
+
+# 1. Prepare the data for the table
+# We use the town_data we already filtered and sorted
+summary_df = town_data[["Vaccine type", "Vaccine coverage"]].copy()
+
+# 2. Add the average column by mapping the values
+summary_df["ממוצע ארצי"] = summary_df["Vaccine type"].map(global_averages)
+
+# 3. Calculate the difference (Gap)
+summary_df["הפרש"] = summary_df["Vaccine coverage"] - summary_df["ממוצע ארצי"]
+
+# 4. Clean up names for display
+summary_df["חיסון"] = summary_df["Vaccine type"].map(lambda x: VAX_MAP.get(x, x))
+summary_df = summary_df[["חיסון", "Vaccine coverage", "ממוצע ארצי", "הפרש"]]
+summary_df.columns = ["סוג חהיסון", "כיסוי ביישוב", "ממוצע ארצי", "הפרש"]
+
+# 5. Format the numbers to look like percentages
+formatted_df = summary_df.style.format({
+    "כיסוי ביישוב": "{:.0f}%",
+    "ממוצע ארצי": "{:.0f}%",
+    "הפרש": "{:+.0f}%" # Adds a + or - sign
+})
+
+# 6. Display the table
+st.dataframe(formatted_df, hide_index=True, use_container_width=True)
